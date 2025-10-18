@@ -1,0 +1,23 @@
+{
+  "name": "zk-voting-prototype",
+  "version": "1.0.0",
+  "description": "Zero-Knowledge Blockchain Voting System Prototype",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.js",
+    "node": "hardhat node",
+    "frontend": "cd frontend && npm start"
+  },
+  "keywords": ["blockchain", "voting", "zero-knowledge", "ethereum"],
+  "author": "Edwin",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0"
+  }
+}
