@@ -4,63 +4,70 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/**
- * @title Voting
- * @dev A blockchain-based voting system with privacy features
- * @author Edwin
- */
+
+//Ownable - helps us create functions, where only the owner/deployer of the contract can make changes
+//ReentrancyGuard - helps prevent race conditions and acts like a mutex lock
+
+
 contract Voting is Ownable, ReentrancyGuard {
     
-    // Struct to hold candidate information
+    // Struct to hold candidate information - name, count of votes, validate if he/she exists
     struct Candidate {
-        string name;
+        string name; 
         uint256 voteCount;
         bool exists;
     }
     
-    // Struct to hold voter information
+    // Struct to hold voter information - is Registered? , has voted?, the voted candidate
     struct Voter {
         bool isRegistered;
         bool hasVoted;
         uint256 votedCandidate;
     }
     
-    // State variables
-    mapping(address => Voter) public voters;
-    mapping(uint256 => Candidate) public candidates;
-    mapping(address => bytes32) public commitments; // For commit-reveal scheme
+    //variables
+    mapping(address => Voter) public voters; //voters[address] = Voter
+    mapping(uint256 => Candidate) public candidates; //candidate[uint256] = Candidate
+    mapping(address => bytes32) public commitments; // For commit-reveal plan, commitments[address] = bytes32
     
-    uint256 public candidatesCount;
-    uint256 public totalVotes;
-    bool public votingActive;
-    bool public revealPhase;
+    uint256 public candidatesCount; //number of candidates
+    uint256 public totalVotes; //total votes
+
+    //conditional variables
+    bool public votingActive; //if true, we cannot reveal votes
+    bool public revealPhase; //if true, we cannot vote
     
-    // Events
+    // Events/emit
+    event CandidateAdded(uint256 indexed candidateId, string name);
+    event VotingStarted();
+    event VotingEnded();
     event VoterRegistered(address indexed voter);
     event VoteCast(address indexed voter, uint256 candidateId);
     event VoteCommitted(address indexed voter, bytes32 commitment);
     event VoteRevealed(address indexed voter, uint256 candidateId);
-    event CandidateAdded(uint256 indexed candidateId, string name);
-    event VotingStarted();
-    event VotingEnded();
     event RevealPhaseStarted();
     
-    // Modifiers
+    // Modifiers - add verification features to functions
+    //Because of Ownable - we don't need custom owner check
+
+    //ensure the voter is registered
     modifier onlyRegisteredVoter() {
         require(voters[msg.sender].isRegistered, "Voter not registered");
         _;
     }
     
+    //ensure voting has started
     modifier votingIsActive() {
         require(votingActive, "Voting is not active");
         _;
     }
     
+    //ensure no double votes
     modifier hasNotVoted() {
         require(!voters[msg.sender].hasVoted, "Voter has already voted");
         _;
     }
-    
+     
     constructor() Ownable(msg.sender) {
         votingActive = false;
         revealPhase = false;
@@ -68,99 +75,97 @@ contract Voting is Ownable, ReentrancyGuard {
         totalVotes = 0;
     }
     
-    /**
-     * @dev Register a new voter (only owner can do this)
-     * @param voter Address of the voter to register
-     */
+
+
+     //Add candidates and register voters - add voter by address and candidate by name
     function registerVoter(address voter) external onlyOwner {
         require(!voters[voter].isRegistered, "Voter already registered");
+
+        //if not already registered, register now!
         voters[voter] = Voter(true, false, 0);
         emit VoterRegistered(voter);
     }
     
-    /**
-     * @dev Add a new candidate (only owner can do this)
-     * @param name Name of the candidate
-     */
     function addCandidate(string memory name) external onlyOwner {
+
+        //once voting has started, no new candidates.
         require(!votingActive, "Cannot add candidates during voting");
+
+        //if voting is not yet started, we can add:
         candidates[candidatesCount] = Candidate(name, 0, true);
         emit CandidateAdded(candidatesCount, name);
         candidatesCount++;
     }
     
-    /**
-     * @dev Start the voting process (only owner)
-     */
+
+    //once set up election, we can start the voting
+    //We should be able to vote once.
+    //The count of votes for each candidate should respectively increase
+
     function startVoting() external onlyOwner {
+        //we want a competition - so minimum 2
         require(candidatesCount >= 2, "Need at least 2 candidates");
+
+        //if there are 2 candidates:
         votingActive = true;
         emit VotingStarted();
     }
     
-    /**
-     * @dev End the voting process and start reveal phase (only owner)
-     */
+
     function endVoting() external onlyOwner {
+
+        //there should be a voting session first
         require(votingActive, "Voting is not active");
+
+        //if there is an active voting session:
         votingActive = false;
+        //start reveal phase
         revealPhase = true;
+
         emit VotingEnded();
         emit RevealPhaseStarted();
     }
     
-    /**
-     * @dev Cast a direct vote (Phase 1 - Basic voting)
-     * @param candidateId ID of the candidate to vote for
-     */
-    function vote(uint256 candidateId) 
-        external 
-        onlyRegisteredVoter 
-        votingIsActive 
-        hasNotVoted 
-        nonReentrant 
-    {
+    //the vote function - must be valid voter/candidate, increment by 1, change state of voter/candidate.
+    //modifiers are used here
+    function vote(uint256 candidateId) external onlyRegisteredVoter votingIsActive hasNotVoted nonReentrant{
+        
+        //check for valid candidateId and if exists
         require(candidateId < candidatesCount, "Invalid candidate ID");
         require(candidates[candidateId].exists, "Candidate does not exist");
         
-        voters[msg.sender].hasVoted = true;
-        voters[msg.sender].votedCandidate = candidateId;
-        candidates[candidateId].voteCount++;
+        //voters
+        voters[msg.sender].hasVoted = true; //change state of voter -> voters[msg.sender]
+        voters[msg.sender].votedCandidate = candidateId; //change votedCandidate of voter -> voters[msg.sender]
+
+        //candidates
+        candidates[candidateId].voteCount++; //change state of candidate -> candidates[candidateId]
+
+        //global
         totalVotes++;
         
-        emit VoteCast(msg.sender, candidateId);
+        emit VoteCast(msg.sender, candidateId); //logs voter and candidate
     }
     
-    /**
-     * @dev Commit a vote hash (Phase 3 - Commit-Reveal)
-     * @param commitment Hash of (vote + salt)
-     */
-    function commitVote(bytes32 commitment) 
-        external 
-        onlyRegisteredVoter 
-        votingIsActive 
-        hasNotVoted 
-        nonReentrant 
-    {
+
+    function commitVote(bytes32 commitment) external onlyRegisteredVoter votingIsActive hasNotVoted nonReentrant {
+
         commitments[msg.sender] = commitment;
+
         emit VoteCommitted(msg.sender, commitment);
     }
-    
-    /**
-     * @dev Reveal a vote (Phase 3 - Commit-Reveal)
-     * @param candidateId ID of the candidate voted for
-     * @param salt Random salt used in commitment
-     */
-    function revealVote(uint256 candidateId, string memory salt) 
-        external 
-        onlyRegisteredVoter 
-        nonReentrant 
-    {
+
+
+    function revealVote(uint256 candidateId, string memory salt) external onlyRegisteredVoter nonReentrant {
+
         require(revealPhase, "Reveal phase not active");
-        require(commitments[msg.sender] != bytes32(0), "No commitment found");
-        require(!voters[msg.sender].hasVoted, "Vote already revealed");
+
         require(candidateId < candidatesCount, "Invalid candidate ID");
         require(candidates[candidateId].exists, "Candidate does not exist");
+
+        require(commitments[msg.sender] != bytes32(0), "No commitment found");
+        
+        require(!voters[msg.sender].hasVoted, "Vote already revealed");
         
         // Verify the commitment
         bytes32 hash = keccak256(abi.encodePacked(candidateId, salt));
@@ -176,22 +181,16 @@ contract Voting is Ownable, ReentrancyGuard {
         
         emit VoteRevealed(msg.sender, candidateId);
     }
-    
-    /**
-     * @dev Get the current vote count for a candidate
-     * @param candidateId ID of the candidate
-     * @return voteCount Number of votes for the candidate
-     */
+
+
+    //helper functions
     function getVoteCount(uint256 candidateId) external view returns (uint256) {
+        //check if valid candidateId
         require(candidateId < candidatesCount, "Invalid candidate ID");
         return candidates[candidateId].voteCount;
     }
     
-    /**
-     * @dev Get all candidates and their vote counts
-     * @return candidateNames Array of candidate names
-     * @return voteCounts Array of vote counts
-     */
+
     function getAllResults() external view returns (string[] memory candidateNames, uint256[] memory voteCounts) {
         candidateNames = new string[](candidatesCount);
         voteCounts = new uint256[](candidatesCount);
@@ -201,21 +200,12 @@ contract Voting is Ownable, ReentrancyGuard {
             voteCounts[i] = candidates[i].voteCount;
         }
     }
-    
-    /**
-     * @dev Check if an address is a registered voter
-     * @param voter Address to check
-     * @return isRegistered True if the address is registered
-     */
+
     function isRegisteredVoter(address voter) external view returns (bool) {
         return voters[voter].isRegistered;
     }
     
-    /**
-     * @dev Check if an address has voted
-     * @param voter Address to check
-     * @return hasVoted True if the address has voted
-     */
+
     function hasVoted(address voter) external view returns (bool) {
         return voters[voter].hasVoted;
     }

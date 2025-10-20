@@ -1,7 +1,7 @@
 const hre = require("hardhat");
 
 async function main() {
-  console.log("Deploying Voting contract..");
+  console.log("Deploying Voting contract:");
   
   // Get the contract factory
   const Voting = await hre.ethers.getContractFactory("Voting");
@@ -27,13 +27,13 @@ async function main() {
   await voting.registerVoter(voter1.address);
   await voting.registerVoter(voter2.address);
   await voting.registerVoter(voter3.address);
-  console.log("Registered test voters");
+  console.log("Registered test voters!");
   
   // Start voting
   await voting.startVoting();
   console.log("Voting started!");
   
-  console.log("\n Contract is ready for testing!");
+  console.log("\nContract is ready for testing!");
   console.log("Contract Address:", contractAddress);
   console.log("Owner:", owner.address);
   console.log("Test Voters:");
