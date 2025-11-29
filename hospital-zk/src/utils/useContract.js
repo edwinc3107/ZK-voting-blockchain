@@ -1,20 +1,11 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 
-// Contract ABI - This would normally be imported from your compiled contract
-const CONTRACT_ABI = [
-  "function getCase(uint256 caseId) external view returns (tuple(string description, uint256 yesVotes, uint256 noVotes, bool isActive, uint256 deadline, uint256 createdAt))",
-  "function getVoteRecords(uint256 caseId) external view returns (tuple(address voter, bool vote, uint256 caseId, uint256 timestamp, bytes32 nullifierHash)[])",
-  "function submitVote(uint256 caseId, bool vote, bytes32 nullifierHash) external",
-  "function isVoterVerified(address voter) external view returns (bool)",
-  "function isBoardMember(address member) external view returns (bool)",
-  "function hasVoterVoted(address voter, uint256 caseId) external view returns (bool)",
-  "function casesCount() external view returns (uint256)",
-  "function getBoardMembers() external view returns (address[])",
-  "event VoteSubmitted(address indexed voter, uint256 indexed caseId, bool vote)",
-  "event EthicsCaseCreated(uint256 indexed caseId, string description)",
-  "event CaseResolved(uint256 indexed caseId, bool approved)"
-];
+// Import the real contract ABI
+import contractArtifact from '../../../artifacts/contracts/HospitalEthicsVoting.sol/HospitalEthicsVoting.json';
+
+// Use the real ABI from the compiled contract
+const CONTRACT_ABI = contractArtifact.abi;
 
 // Contract address - Hospital Ethics Contract (deployed to localhost)
 const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
@@ -97,15 +88,9 @@ export const useContract = () => {
       
       isVoterVerified: async (address) => {
         const verifiedVoters = [
-          "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-          "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-          "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
-          // Demo mode addresses
-          "0x1234567890123456789012345678901234567890", // Board Member 1
-          "0x2345678901234567890123456789012345678901", // Board Member 2
-          "0x3456789012345678901234567890123456789012", // Doctor Smith
-          "0x4567890123456789012345678901234567890123", // Nurse Johnson
-          "0x5678901234567890123456789012345678901234"  // Staff Member
+          "0xbda5747bfd65f08deb54cb465eb87d40e51b197e", // My Account
+          "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", // Dr. Sarah Chen (also board member)
+          "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"  // Dr. Michael Rodriguez
         ];
         const isVerified = verifiedVoters.includes(address);
         console.log(`🔍 Checking voter verification for ${address}: ${isVerified}`);
@@ -114,14 +99,7 @@ export const useContract = () => {
       
       isBoardMember: async (address) => {
         const boardMembers = [
-          "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-          "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-          "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
-          "0x90F79bf6EB2c4f870365E785982E1f101E9b3526",
-          "0x15d34AAf54267DB7D7c367839AAaf71A00a2C6A65",
-          // Demo mode addresses
-          "0x1234567890123456789012345678901234567890", // Board Member 1
-          "0x2345678901234567890123456789012345678901"  // Board Member 2
+          "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"  // Dr. Sarah Chen (only board member)
         ];
         const isBoardMember = boardMembers.includes(address);
         console.log(`👥 Checking board member status for ${address}: ${isBoardMember}`);
@@ -182,17 +160,8 @@ export const useContract = () => {
   };
 
   const connectWallet = async () => {
-    // Check if we want to use real MetaMask or test mode
-    const useTestMode = true; // Set to false to use real MetaMask
-    
-    if (useTestMode) {
-      console.log('Using test mode for demo');
-      
-      const mockContract = createMockContract();
-      setContract(mockContract);
-      // Return a verified voter address for testing
-      return "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-    }
+    // Try real contract first, fallback to mock if it fails
+    console.log('Attempting to connect to real contract...');
 
     // Real MetaMask connection
     if (!window.ethereum) {
@@ -200,10 +169,52 @@ export const useContract = () => {
     }
 
     try {
-      // Request account access
+      // Check and switch to localhost network if needed
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      console.log('Current chain ID:', chainId);
+      
+      if (chainId !== '0x539') { // 0x539 = 1337 in hex
+        console.log('Switching to localhost network...');
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x539' }],
+          });
+        } catch (switchError) {
+          // If localhost network doesn't exist, add it
+          if (switchError.code === 4902) {
+            console.log('Adding localhost network...');
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x539',
+                chainName: 'Hardhat Localhost',
+                rpcUrls: ['http://127.0.0.1:8545'],
+                nativeCurrency: {
+                  name: 'Ethereum',
+                  symbol: 'ETH',
+                  decimals: 18,
+                },
+                blockExplorerUrls: null,
+              }],
+            });
+          } else {
+            throw switchError;
+          }
+        }
+      }
+
+      // Force MetaMask to show account selection
       const accounts = await window.ethereum.request({
         method: 'eth_requestAccounts'
       });
+      
+      console.log('Available accounts:', accounts);
+      
+      // If multiple accounts, let user choose
+      if (accounts.length > 1) {
+        console.log('Multiple accounts detected. User should select the funded account.');
+      }
 
       // Create provider and signer
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -211,6 +222,25 @@ export const useContract = () => {
       
       // Create contract instance
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      // Test the contract with a simple call
+      try {
+        console.log('Testing contract connection...');
+        console.log('Contract address:', CONTRACT_ADDRESS);
+        console.log('Provider network:', await provider.getNetwork());
+        
+        const casesCount = await contract.casesCount();
+        console.log('✅ Real contract is working, cases count:', casesCount.toString());
+      } catch (contractError) {
+        console.log('❌ Real contract failed, falling back to mock mode');
+        console.log('Contract error:', contractError.message);
+        console.log('Error details:', contractError);
+        
+        // Fallback to mock contract
+        const mockContract = createMockContract();
+        setContract(mockContract);
+        return accounts[0];
+      }
 
       setProvider(provider);
       setSigner(signer);
@@ -229,13 +259,143 @@ export const useContract = () => {
     setSigner(null);
   };
 
-  // Function to update contract when account changes
-  const updateContract = () => {
-    console.log('🔄 Updating contract for new account...');
-    const newContract = createMockContract();
-    setContract(newContract);
-    console.log('✅ Contract updated successfully');
+  // Function to set demo mode with real contract
+  const setDemoMode = async (demoAccount) => {
+    console.log('Setting demo mode with account:', demoAccount);
+    
+    // Check if this is the funded account that needs MetaMask
+    const isFundedAccount = demoAccount === "0xbda5747bfd65f08deb54cb465eb87d40e51b197e";
+    
+    if (isFundedAccount) {
+      // For funded account, try MetaMask interaction
+      try {
+        if (!window.ethereum) {
+          throw new Error('MetaMask not detected');
+        }
+
+        // Check and switch to localhost network if needed
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        console.log('Demo mode - Current chain ID:', chainId);
+        
+        if (chainId !== '0x539') { // 0x539 = 1337 in hex
+          console.log('Demo mode - Switching to localhost network...');
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x539' }],
+            });
+          } catch (switchError) {
+            // If localhost network doesn't exist, add it
+            if (switchError.code === 4902) {
+              console.log('Demo mode - Adding localhost network...');
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: '0x539',
+                  chainName: 'Hardhat Localhost',
+                  rpcUrls: ['http://127.0.0.1:8545'],
+                  nativeCurrency: {
+                    name: 'Ethereum',
+                    symbol: 'ETH',
+                    decimals: 18,
+                  },
+                  blockExplorerUrls: null,
+                }],
+              });
+            } else {
+              throw switchError;
+            }
+          }
+        }
+
+        // Switch to demo account if provided
+        if (demoAccount) {
+          try {
+            // First ensure we're on the right network
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x539' }]
+            });
+            
+            // Request permissions to access accounts
+            await window.ethereum.request({
+              method: 'wallet_requestPermissions',
+              params: [{ eth_accounts: {} }]
+            });
+            
+            // Get current accounts
+            const accounts = await window.ethereum.request({
+              method: 'eth_accounts'
+            });
+            
+            console.log('Available accounts:', accounts);
+            console.log('Target demo account:', demoAccount);
+            
+            // Check if the demo account is available
+            if (accounts.includes(demoAccount)) {
+              console.log('✅ Demo account is available');
+            } else {
+              console.log('❌ Demo account not found in MetaMask');
+              console.log('Please add the demo account to MetaMask or use a different account');
+            }
+            
+          } catch (switchError) {
+            console.log('Account switch failed:', switchError.message);
+          }
+        }
+
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+        
+        // Test the contract
+        try {
+          const casesCount = await contract.casesCount();
+          console.log('✅ Demo mode using real contract, cases count:', casesCount.toString());
+          
+          // For board members, we need a signer for transactions
+          let contractWithSigner = contract;
+          let signer = null;
+          
+          if (demoAccount && await contract.isBoardMember(demoAccount)) {
+            console.log('🔐 Board member detected - creating contract with signer');
+            signer = await provider.getSigner();
+            contractWithSigner = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+          }
+          
+          setProvider(provider);
+          setSigner(signer);
+          setContract(contractWithSigner);
+        } catch (error) {
+          console.log('❌ Real contract failed in demo mode, using mock');
+          console.log('Contract error:', error.message);
+          
+          // Fallback to mock contract
+          const mockContract = createMockContract();
+          setProvider(null);
+          setSigner(null);
+          setContract(mockContract);
+        }
+        
+      } catch (error) {
+        console.log('❌ Demo mode error, using mock contract');
+        console.log('Error:', error.message);
+        
+        // Fallback to mock contract
+        const mockContract = createMockContract();
+        setProvider(null);
+        setSigner(null);
+        setContract(mockContract);
+      }
+    } else {
+      // For all other demo accounts, use pure mock mode (no MetaMask)
+      console.log('🎭 Using pure demo mode (no MetaMask required)');
+      const mockContract = createMockContract();
+      setProvider(null);
+      setSigner(null);
+      setContract(mockContract);
+    }
   };
+
 
   return {
     contract,
@@ -243,7 +403,7 @@ export const useContract = () => {
     signer,
     connectWallet,
     disconnectWallet,
-    updateContract
+    setDemoMode
   };
 };
 

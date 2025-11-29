@@ -5,30 +5,31 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract HospitalEthicsVoting is ReentrancyGuard {
     
-    // Board Members (5 members, need 3 for consensus)
+    // Board Members (flexible count, need majority for decision consensus)
     address[] public boardMembers;
     mapping(address => bool) public isBoardMember;
-    uint256 public constant REQUIRED_CONSENSUS = 3;
+    uint256 public REQUIRED_CONSENSUS;
     
     // Verified Voters (doctors, staff)
     mapping(address => bool) public verifiedVoters;
     
-    // Ethics Cases
+    // Ethics Cases - that have been proposed
     struct EthicsCase {
-        string description;
-        uint256 yesVotes;
+        string description; //description of case
+        uint256 yesVotes; 
         uint256 noVotes;
-        bool isActive;
-        uint256 deadline;
-        uint256 createdAt;
+        bool isActive; //is case active?
+        uint256 deadline; //deadline to vote
+        uint256 createdAt; //created at
     }
     
-    mapping(uint256 => EthicsCase) public ethicsCases;
+    mapping(uint256 => EthicsCase) public ethicsCases; 
     uint256 public casesCount;
     
     // ZK Proof Simulation (nullifier system)
     mapping(bytes32 => bool) public usedNullifiers;
     
+
     // Voting Records (for transparency)
     struct VoteRecord {
         address voter;
@@ -71,7 +72,7 @@ contract HospitalEthicsVoting is ReentrancyGuard {
     }
     
     constructor(address[] memory initialBoardMembers) {
-        require(initialBoardMembers.length == 5, "Must have exactly 5 board members");
+        require(initialBoardMembers.length >= 1, "Must have at least 1 board member");
         
         for (uint256 i = 0; i < initialBoardMembers.length; i++) {
             boardMembers.push(initialBoardMembers[i]);
@@ -79,13 +80,17 @@ contract HospitalEthicsVoting is ReentrancyGuard {
             emit BoardMemberAdded(initialBoardMembers[i]);
         }
         
+        // Set consensus requirement to majority (at least 1 for single member boards)
+        REQUIRED_CONSENSUS = (initialBoardMembers.length + 1) / 2;
+        if (REQUIRED_CONSENSUS == 0) REQUIRED_CONSENSUS = 1;
+        
         casesCount = 0;
     }
     
     // Board Functions (require consensus)
     function addBoardMember(address newMember) external onlyBoardMember {
         require(!isBoardMember[newMember], "Already a board member");
-        require(boardMembers.length < 5, "Maximum 5 board members");
+        require(boardMembers.length < 10, "Maximum 10 board members");
         
         boardMembers.push(newMember);
         isBoardMember[newMember] = true;
@@ -162,7 +167,7 @@ contract HospitalEthicsVoting is ReentrancyGuard {
         bool approved = ethicsCases[caseId].yesVotes > ethicsCases[caseId].noVotes;
         emit CaseResolved(caseId, approved);
     }
-    
+
     // View Functions
     function getCase(uint256 caseId) external view caseExists(caseId) returns (EthicsCase memory) {
         return ethicsCases[caseId];

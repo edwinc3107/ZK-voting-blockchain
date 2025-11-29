@@ -8,7 +8,6 @@ const ResultsPage = ({ contract, account }) => {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCase, setSelectedCase] = useState(null);
-  const [voteRecords, setVoteRecords] = useState([]);
 
   useEffect(() => {
     if (contract) {
@@ -46,19 +45,10 @@ const ResultsPage = ({ contract, account }) => {
     }
   };
 
-  const loadVoteRecords = async (caseId) => {
-    try {
-      const records = await contract.getVoteRecords(caseId);
-      setVoteRecords(records);
-    } catch (error) {
-      console.error('Error loading vote records:', error);
-    }
-  };
 
   const handleCaseSelect = (caseId) => {
     const selected = cases.find(c => c.id === caseId);
     setSelectedCase(selected);
-    loadVoteRecords(caseId);
   };
 
   const getChartData = (caseItem) => {
@@ -162,13 +152,13 @@ const ResultsPage = ({ contract, account }) => {
                         <div className="text-2xl font-bold text-success-600">
                           {Number(caseItem.yesVotes)}
                         </div>
-                        <div className="text-sm text-gray-600">Yes ({caseItem.yesPercentage.toFixed(1)}%)</div>
+                        <div className="text-sm text-gray-600">Yes ({isNaN(caseItem.yesPercentage) ? '0.0' : caseItem.yesPercentage.toFixed(1)}%)</div>
                       </div>
                       <div className="text-center">
                         <div className="text-2xl font-bold text-danger-600">
                           {Number(caseItem.noVotes)}
                         </div>
-                        <div className="text-sm text-gray-600">No ({caseItem.noPercentage.toFixed(1)}%)</div>
+                        <div className="text-sm text-gray-600">No ({isNaN(caseItem.noPercentage) ? '0.0' : caseItem.noPercentage.toFixed(1)}%)</div>
                       </div>
                       <div className="text-center">
                         <div className="text-2xl font-bold text-gray-600">
@@ -247,13 +237,13 @@ const ResultsPage = ({ contract, account }) => {
                 <div className="flex justify-between items-center p-3 bg-success-50 rounded-lg">
                   <span className="font-medium text-success-800">Yes Votes</span>
                   <span className="text-lg font-bold text-success-600">
-                    {Number(selectedCase.yesVotes)} ({selectedCase.yesPercentage.toFixed(1)}%)
+                    {Number(selectedCase.yesVotes)} ({isNaN(selectedCase.yesPercentage) ? '0.0' : selectedCase.yesPercentage.toFixed(1)}%)
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-danger-50 rounded-lg">
                   <span className="font-medium text-danger-800">No Votes</span>
                   <span className="text-lg font-bold text-danger-600">
-                    {Number(selectedCase.noVotes)} ({selectedCase.noPercentage.toFixed(1)}%)
+                    {Number(selectedCase.noVotes)} ({isNaN(selectedCase.noPercentage) ? '0.0' : selectedCase.noPercentage.toFixed(1)}%)
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
@@ -266,52 +256,6 @@ const ResultsPage = ({ contract, account }) => {
             </div>
           </div>
 
-          {/* Vote Records */}
-          {voteRecords.length > 0 && (
-            <div className="mt-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Vote Records (Transparency)
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Voter
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Vote
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Timestamp
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {voteRecords.map((record, index) => (
-                      <tr key={index}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {record.voter.slice(0, 6)}...{record.voter.slice(-4)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            record.vote 
-                              ? 'bg-success-100 text-success-800' 
-                              : 'bg-danger-100 text-danger-800'
-                          }`}>
-                            {record.vote ? '✅ Yes' : '❌ No'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(Number(record.timestamp) * 1000).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

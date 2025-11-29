@@ -10,10 +10,18 @@ const VotingInterface = ({ contract, account, isConnected }) => {
     isVerified: false,
     isBoardMember: false
   });
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     if (contract && account) {
       loadData();
+      
+      // Set up live vote count updates every 5 seconds
+      const interval = setInterval(() => {
+        updateVoteCounts();
+      }, 5000);
+      
+      return () => clearInterval(interval);
     } else {
       // Reset state when no contract/account
       setCases([]);
@@ -21,6 +29,56 @@ const VotingInterface = ({ contract, account, isConnected }) => {
       setLoading(false);
     }
   }, [contract, account]);
+
+  const updateVoteCounts = async () => {
+    if (!contract) return;
+    
+    try {
+      const casesCount = await contract.casesCount();
+      
+      for (let i = 0; i < casesCount; i++) {
+        const caseData = await contract.getCase(i);
+        const newTotalVotes = Number(caseData.yesVotes) + Number(caseData.noVotes);
+        
+        setCases(prevCases => {
+          const updatedCases = prevCases.map(c => {
+            if (c.id === i) {
+              const oldTotalVotes = c.totalVotes || 0;
+              
+              // Check if there's a new vote (ZK privacy - we don't know who voted)
+              if (newTotalVotes > oldTotalVotes) {
+                const newNotification = {
+                  id: Date.now(),
+                  message: `🔐 Anonymous vote cast on Case #${i + 1}`,
+                  timestamp: new Date(),
+                  type: 'vote'
+                };
+                
+                setNotifications(prev => [newNotification, ...prev.slice(0, 4)]); // Keep last 5 notifications
+                
+                // Auto-remove notification after 10 seconds
+                setTimeout(() => {
+                  setNotifications(prev => prev.filter(n => n.id !== newNotification.id));
+                }, 10000);
+              }
+              
+              return { 
+                ...c, 
+                yesVotes: Number(caseData.yesVotes),
+                noVotes: Number(caseData.noVotes),
+                totalVotes: newTotalVotes
+              };
+            }
+            return c;
+          });
+          
+          return updatedCases;
+        });
+      }
+    } catch (error) {
+      console.error('Error updating vote counts:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -50,7 +108,8 @@ const VotingInterface = ({ contract, account, isConnected }) => {
           ...caseData,
           hasVoted,
           timeRemaining: formatTimeRemaining(Number(caseData.deadline)),
-          isActive: isVotingActive(Number(caseData.deadline))
+          isActive: isVotingActive(Number(caseData.deadline)),
+          totalVotes: Number(caseData.yesVotes) + Number(caseData.noVotes)
         });
       }
 
@@ -168,6 +227,27 @@ const VotingInterface = ({ contract, account, isConnected }) => {
         </div>
       </div>
 
+      {/* Live Notifications */}
+      {notifications.length > 0 && (
+        <div className="card">
+          <h3 className="text-sm font-medium text-gray-900 mb-3">🔔 Live Activity</h3>
+          <div className="space-y-2">
+            {notifications.map(notification => (
+              <div
+                key={notification.id}
+                className="flex items-center space-x-2 p-2 bg-blue-50 rounded-lg border border-blue-200"
+              >
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <span className="text-sm text-blue-800">{notification.message}</span>
+                <span className="text-xs text-blue-600 ml-auto">
+                  {notification.timestamp.toLocaleTimeString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Active Cases */}
       <div>
         <h2 className="text-xl font-bold text-gray-900 mb-4">
@@ -193,7 +273,7 @@ const VotingInterface = ({ contract, account, isConnected }) => {
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      Case #{caseItem.id}: {caseItem.description}
+                      Case #{caseItem.id + 1}: {caseItem.description}
                     </h3>
                     <div className="flex items-center space-x-4 text-sm text-gray-600">
                       <span>Created: {new Date(Number(caseItem.createdAt) * 1000).toLocaleDateString()}</span>

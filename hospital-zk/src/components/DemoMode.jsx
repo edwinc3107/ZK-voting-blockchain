@@ -3,44 +3,85 @@ import React, { useState } from 'react';
 const DemoMode = ({ onSwitchWallet, currentAccount }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Pre-configured demo wallets for different roles
+  // Simplified demo accounts with clear roles
   const demoWallets = [
     {
-      name: "Board Member 1",
-      address: "0x1234567890123456789012345678901234567890",
-      role: "Board Member",
-      color: "bg-blue-500"
-    },
-    {
-      name: "Board Member 2", 
-      address: "0x2345678901234567890123456789012345678901",
-      role: "Board Member",
-      color: "bg-blue-600"
-    },
-    {
-      name: "Doctor Smith",
-      address: "0x3456789012345678901234567890123456789012", 
+      name: "My Account",
+      address: "0xbda5747bfd65f08deb54cb465eb87d40e51b197e",
       role: "Verified Voter",
-      color: "bg-green-500"
+      description: "Requires MetaMask - Can vote on ethics cases",
+      color: "bg-green-500",
+      roleType: "verified_voter"
     },
     {
-      name: "Nurse Johnson",
-      address: "0x4567890123456789012345678901234567890123",
-      role: "Verified Voter", 
-      color: "bg-green-600"
+      name: "Dr. Sarah Chen",
+      address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      role: "Board Member",
+      description: "No MetaMask needed - Can create cases & verify voters",
+      color: "bg-blue-500",
+      roleType: "board_member"
     },
     {
-      name: "Staff Member",
-      address: "0x5678901234567890123456789012345678901234",
+      name: "Dr. Michael Rodriguez", 
+      address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
       role: "Verified Voter",
-      color: "bg-purple-500"
+      description: "No MetaMask needed - Can vote on ethics cases",
+      color: "bg-green-600",
+      roleType: "verified_voter"
+    },
+    {
+      name: "Nurse James Wilson",
+      address: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+      role: "Unverified",
+      description: "No MetaMask needed - Can only view results",
+      color: "bg-gray-500",
+      roleType: "unverified"
     }
   ];
 
-  const handleSwitchWallet = (wallet) => {
-    onSwitchWallet(wallet.address);
-    setIsOpen(false);
+  const handleSwitchWallet = async (wallet) => {
+    console.log(`🎭 Switching to demo wallet: ${wallet.name}`);
+    console.log(`   Address: ${wallet.address}`);
+    console.log(`   Role: ${wallet.role}`);
+    
+    // Check if this is the funded account that needs MetaMask
+    const isFundedAccount = wallet.address === "0xbda5747bfd65f08deb54cb465eb87d40e51b197e";
+    
+    if (isFundedAccount) {
+      // For funded account, try MetaMask interaction
+      try {
+        await window.ethereum.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }]
+        });
+        
+        const accounts = await window.ethereum.request({
+          method: 'eth_accounts'
+        });
+        
+        if (accounts.includes(wallet.address)) {
+          console.log('✅ Funded account is available in MetaMask');
+          onSwitchWallet(wallet.address);
+          setIsOpen(false);
+        } else {
+          alert(`🎭 Demo Mode: ${wallet.name}\n\nThis account is not available in MetaMask.\nPlease add this account to MetaMask manually:\n${wallet.address}\n\nThis account has ${wallet.role.toLowerCase()} privileges.`);
+          onSwitchWallet(wallet.address);
+          setIsOpen(false);
+        }
+      } catch (error) {
+        console.error('Error switching funded account:', error);
+        alert(`🎭 Demo Mode: ${wallet.name}\n\nPlease manually switch to this account in MetaMask:\n${wallet.address}\n\nThis account has ${wallet.role.toLowerCase()} privileges.`);
+        onSwitchWallet(wallet.address);
+        setIsOpen(false);
+      }
+    } else {
+      // For all other demo accounts, bypass MetaMask entirely
+      console.log('🎭 Using pure demo mode (no MetaMask required)');
+      onSwitchWallet(wallet.address);
+      setIsOpen(false);
+    }
   };
+
 
   return (
     <div className="relative">
@@ -79,9 +120,6 @@ const DemoMode = ({ onSwitchWallet, currentAccount }) => {
                   <div className="flex-1 text-left">
                     <div className="font-medium text-gray-900">{wallet.name}</div>
                     <div className="text-sm text-gray-600">{wallet.role}</div>
-                    <div className="text-xs text-gray-500 font-mono">
-                      {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
-                    </div>
                   </div>
                   {currentAccount === wallet.address && (
                     <div className="text-medical-600">
@@ -96,7 +134,7 @@ const DemoMode = ({ onSwitchWallet, currentAccount }) => {
             
             <div className="mt-4 pt-4 border-t border-gray-200">
               <div className="text-xs text-gray-500">
-                <p><strong>Note:</strong> This is demo mode. In production, users would connect their own wallets.</p>
+                <p><strong>Note:</strong> Demo accounts (except "Your Funded Account") work without MetaMask. Only the funded account requires MetaMask for real blockchain interaction.</p>
               </div>
             </div>
           </div>

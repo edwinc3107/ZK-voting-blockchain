@@ -6,6 +6,7 @@ import BoardInterface from './components/BoardInterface';
 import DemoMode from './components/DemoMode';
 import TransactionRecorder, { emitTransaction } from './components/TransactionRecorder';
 import DemoWorkflowGuide from './components/DemoWorkflowGuide';
+import AccountSelector from './components/AccountSelector';
 import { useContract } from './utils/useContract';
 
 function App() {
@@ -14,29 +15,74 @@ function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [showWorkflowGuide, setShowWorkflowGuide] = useState(false);
-  const { contract, connectWallet, disconnectWallet, updateContract } = useContract();
+  const [showAccountSelector, setShowAccountSelector] = useState(false);
+  const [userStatus, setUserStatus] = useState({
+    isVerified: false,
+    isBoardMember: false
+  });
+  const { contract, connectWallet, disconnectWallet, setDemoMode } = useContract();
 
   useEffect(() => {
-    // Check if wallet is already connected
-    if (window.ethereum) {
-      window.ethereum.request({ method: 'eth_accounts' })
-        .then(accounts => {
-          if (accounts.length > 0) {
-            setAccount(accounts[0]);
-            setIsConnected(true);
-          }
-        });
-    }
+    // Don't auto-connect on page load
+    // Let user manually connect to ensure they choose the right account
+    console.log('App loaded - ready for manual wallet connection');
   }, []);
+
+  // Check user status when account or contract changes
+  useEffect(() => {
+    const checkUserStatus = async () => {
+      if (contract && account) {
+        try {
+          const isVerified = await contract.isVoterVerified(account);
+          const isBoardMember = await contract.isBoardMember(account);
+          setUserStatus({ isVerified, isBoardMember });
+        } catch (error) {
+          console.error('Error checking user status:', error);
+          setUserStatus({ isVerified: false, isBoardMember: false });
+        }
+      } else {
+        setUserStatus({ isVerified: false, isBoardMember: false });
+      }
+    };
+
+    checkUserStatus();
+  }, [contract, account]);
+
+  // Set appropriate default view based on user role
+  useEffect(() => {
+    if (userStatus.isBoardMember) {
+      setCurrentView('board');
+    } else if (userStatus.isVerified) {
+      setCurrentView('voting');
+    } else {
+      setCurrentView('results');
+    }
+  }, [userStatus]);
 
   const handleConnect = async () => {
     try {
+      // Show account selector instead of auto-connecting
+      setShowAccountSelector(true);
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+    }
+  };
+
+  const handleAccountSelected = async (selectedAccount) => {
+    try {
+      // Switch MetaMask to the selected account
+      await window.ethereum.request({
+        method: 'wallet_requestPermissions',
+        params: [{ eth_accounts: {} }]
+      });
+
+      // Now connect with the selected account
       const account = await connectWallet();
       setAccount(account);
       setIsConnected(true);
       setIsDemoMode(false);
     } catch (error) {
-      console.error('Failed to connect wallet:', error);
+      console.error('Failed to connect with selected account:', error);
     }
   };
 
@@ -47,15 +93,16 @@ function App() {
     setIsDemoMode(false);
   };
 
-  const handleDemoSwitch = (demoAddress) => {
+  const handleDemoSwitch = async (demoAddress) => {
     console.log(`🎭 Demo Mode Switch:`);
     console.log(`   Switching to: ${demoAddress}`);
+    
+    // Set demo mode with real contract
+    await setDemoMode(demoAddress);
+    
     setAccount(demoAddress);
     setIsConnected(true);
     setIsDemoMode(true);
-    
-    // Update the contract for the new account
-    updateContract();
     
     emitTransaction('demo_switch', { address: demoAddress });
   };
@@ -126,26 +173,35 @@ function App() {
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-8">
-            <button
-              onClick={() => setCurrentView('board')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                currentView === 'board'
-                  ? 'border-medical-500 text-medical-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Board Interface
-            </button>
-            <button
-              onClick={() => setCurrentView('voting')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                currentView === 'voting'
-                  ? 'border-medical-500 text-medical-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Voting Interface
-            </button>
+            {/* Board Interface - Only for Board Members */}
+            {userStatus.isBoardMember && (
+              <button
+                onClick={() => setCurrentView('board')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  currentView === 'board'
+                    ? 'border-medical-500 text-medical-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Board Interface
+              </button>
+            )}
+            
+            {/* Voting Interface - Only for Verified Voters */}
+            {userStatus.isVerified && (
+              <button
+                onClick={() => setCurrentView('voting')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  currentView === 'voting'
+                    ? 'border-medical-500 text-medical-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Voting Interface
+              </button>
+            )}
+            
+            {/* Results - Available to Everyone */}
             <button
               onClick={() => setCurrentView('results')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
@@ -161,48 +217,96 @@ function App() {
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!isConnected ? (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-medical-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-medical-600 text-2xl">🔗</span>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex gap-6">
+        <div className="flex-1">
+          {!isConnected ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-medical-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-medical-600 text-2xl">🔗</span>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Connect Your Wallet
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Please connect your MetaMask wallet to access the voting system.
+              </p>
+              <button
+                onClick={handleConnect}
+                className="btn-primary text-lg px-8 py-3"
+              >
+                Connect MetaMask
+              </button>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Connect Your Wallet
-            </h2>
-            <p className="text-gray-600 mb-6">
-              Please connect your MetaMask wallet to access the voting system.
-            </p>
-            <button
-              onClick={handleConnect}
-              className="btn-primary text-lg px-8 py-3"
-            >
-              Connect MetaMask
-            </button>
+          ) : (
+            <>
+              {currentView === 'board' && userStatus.isBoardMember && (
+                <BoardInterface 
+                  contract={contract} 
+                  account={account}
+                  isConnected={isConnected}
+                />
+              )}
+              {currentView === 'board' && !userStatus.isBoardMember && (
+                <div className="card text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-gray-400 text-2xl">🚫</span>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    Access Restricted
+                  </h3>
+                  <p className="text-gray-600 mb-4">
+                    Only board members can access the board interface.
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Your account: {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : 'Not connected'}
+                  </p>
+                </div>
+              )}
+              {currentView === 'voting' && userStatus.isVerified && (
+                <VotingInterface 
+                  contract={contract} 
+                  account={account}
+                  isConnected={isConnected}
+                />
+              )}
+              {currentView === 'voting' && !userStatus.isVerified && (
+                <div className="card text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-gray-400 text-2xl">🗳️</span>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    Voting Restricted
+                  </h3>
+                  <p className="text-gray-600 mb-4">
+                    Only verified voters can access the voting interface.
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Your account: {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : 'Not connected'}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Please contact a board member to get verified.
+                  </p>
+                </div>
+              )}
+              {currentView === 'results' && (
+                <ResultsPage 
+                  contract={contract} 
+                  account={account}
+                />
+              )}
+            </>
+          )}
+        </div>
+        
+        {/* Transaction Pane */}
+        {isConnected && (
+          <div className="w-80 bg-white rounded-lg border border-gray-200 p-4 h-fit">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <span className="mr-2">📊</span>
+              Live Transactions
+            </h3>
+            <TransactionRecorder />
           </div>
-        ) : (
-          <>
-            {currentView === 'board' && (
-              <BoardInterface 
-                contract={contract} 
-                account={account}
-                isConnected={isConnected}
-              />
-            )}
-            {currentView === 'voting' && (
-              <VotingInterface 
-                contract={contract} 
-                account={account}
-                isConnected={isConnected}
-              />
-            )}
-            {currentView === 'results' && (
-              <ResultsPage 
-                contract={contract} 
-                account={account}
-              />
-            )}
-          </>
         )}
       </main>
 
@@ -229,6 +333,14 @@ function App() {
         isVisible={showWorkflowGuide} 
         onClose={() => setShowWorkflowGuide(false)} 
       />
+
+      {/* Account Selector */}
+      {showAccountSelector && (
+        <AccountSelector
+          onAccountSelected={handleAccountSelected}
+          onClose={() => setShowAccountSelector(false)}
+        />
+      )}
     </div>
   );
 }
