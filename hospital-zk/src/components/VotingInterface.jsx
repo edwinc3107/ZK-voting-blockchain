@@ -3,6 +3,7 @@ import { generateNullifier } from '../utils/useContract';
 import { emitTransaction } from './TransactionRecorder';
 import ReceiptDisplay from './ReceiptDisplay';
 import { getVoterReceipt, saveReceipt } from '../utils/receiptUtils';
+import PieChart from './PieChart';
 
 const VotingInterface = ({ contract, account, isConnected, userStatus: propUserStatus }) => {
   const [cases, setCases] = useState([]);
@@ -94,16 +95,104 @@ const VotingInterface = ({ contract, account, isConnected, userStatus: propUserS
     try {
       setLoading(true);
       
-      // Always check the actual MetaMask account
-      const provider = contract.provider;
-      if (!provider) {
-        // Provider not available yet - this is normal during initialization
+      // Always add dummy cases for UI demo, even if contract isn't ready
+      const now = Math.floor(Date.now() / 1000);
+      const dummyActiveCase = {
+        id: -1,
+        description: 'Ethics review for telemedicine patient privacy protocols',
+        createdAt: now - (2 * 24 * 60 * 60),
+        deadline: now + (5 * 24 * 60 * 60),
+        yesVotes: 0,
+        noVotes: 0,
+        hasVoted: false,
+        timeRemaining: '5d 12h',
+        isActive: true,
+        totalVotes: 0,
+        isDummy: true
+      };
+      
+      const dummyClosedCases = [
+        {
+          id: -2,
+          description: 'Patient consent for experimental treatment protocol',
+          createdAt: now - (14 * 24 * 60 * 60),
+          deadline: now - (7 * 24 * 60 * 60),
+          yesVotes: 45,
+          noVotes: 12,
+          hasVoted: true,
+          timeRemaining: '',
+          isActive: false,
+          totalVotes: 57,
+          isDummy: true
+        },
+        {
+          id: -3,
+          description: 'Resource allocation for emergency department expansion',
+          createdAt: now - (21 * 24 * 60 * 60),
+          deadline: now - (14 * 24 * 60 * 60),
+          yesVotes: 32,
+          noVotes: 28,
+          hasVoted: true,
+          timeRemaining: '',
+          isActive: false,
+          totalVotes: 60,
+          isDummy: true
+        },
+        {
+          id: -4,
+          description: 'Ethics review for AI-assisted diagnosis implementation',
+          createdAt: now - (10 * 24 * 60 * 60),
+          deadline: now - (3 * 24 * 60 * 60),
+          yesVotes: 18,
+          noVotes: 5,
+          hasVoted: false,
+          timeRemaining: '',
+          isActive: false,
+          totalVotes: 23,
+          isDummy: true
+        }
+      ];
+      
+      // Get provider and signer - try multiple methods for ethers v6 compatibility
+      let provider, signer, actualAddress;
+      
+      try {
+        // Method 1: Try contract.runner (ethers v6)
+        if (contract.runner && typeof contract.runner.getAddress === 'function') {
+          signer = contract.runner;
+          actualAddress = await signer.getAddress();
+          provider = signer.provider;
+        }
+        // Method 2: Try contract.provider.getSigner()
+        else if (contract.provider) {
+          provider = contract.provider;
+          signer = await provider.getSigner();
+          actualAddress = await signer.getAddress();
+        }
+        // Method 3: Use window.ethereum directly
+        else if (window.ethereum) {
+          const { ethers } = await import('ethers');
+          provider = new ethers.BrowserProvider(window.ethereum);
+          signer = await provider.getSigner();
+          actualAddress = await signer.getAddress();
+        }
+        else {
+          throw new Error('No provider available');
+        }
+      } catch (error) {
+        console.error('⚠️ Error getting provider/signer:', error);
+        console.log('⚠️ Showing dummy cases only');
+        setCases([dummyActiveCase, ...dummyClosedCases]);
         setLoading(false);
         return;
       }
       
-      const signer = await provider.getSigner();
-      const actualAddress = await signer.getAddress();
+      if (!provider || !signer || !actualAddress) {
+        console.log('⚠️ No provider/signer available, showing dummy cases only');
+        setCases([dummyActiveCase, ...dummyClosedCases]);
+        setLoading(false);
+        return;
+      }
       
       console.log('🔍 Loading data for account:', actualAddress);
       
@@ -136,6 +225,8 @@ const VotingInterface = ({ contract, account, isConnected, userStatus: propUserS
         console.log('📋 Cases count:', casesCount.toString());
       } catch (error) {
         console.error('Error getting cases count:', error);
+        // Even if contract fails, show dummy cases
+        setCases([dummyActiveCase, ...dummyClosedCases]);
         setLoading(false);
         return;
       }
@@ -193,7 +284,37 @@ const VotingInterface = ({ contract, account, isConnected, userStatus: propUserS
         }
       }
 
-      setCases(casesData);
+      // Combine: real cases first, then dummy closed cases
+      // Only add dummy active case if NO real active cases exist
+      const hasRealActiveCase = casesData.some(c => c.isActive);
+      let allCases;
+      if (hasRealActiveCase) {
+        // Real active cases exist - ONLY show real cases + dummy closed cases (NO dummy active case)
+        allCases = [...casesData, ...dummyClosedCases];
+        console.log('✅ Real active cases found - showing real cases only (dummy active excluded)');
+        console.log(`   Real active cases: ${casesData.filter(c => c.isActive).length}`);
+        console.log(`   Real closed cases: ${casesData.filter(c => !c.isActive).length}`);
+        console.log(`   Dummy closed cases: ${dummyClosedCases.length}`);
+      } else {
+        // No real active cases - show dummy active case + real cases + dummy closed cases
+        allCases = [dummyActiveCase, ...casesData, ...dummyClosedCases];
+        console.log('⚠️ No real active cases - showing dummy active case');
+      }
+      
+      console.log('✅ Setting cases:', {
+        totalCases: allCases.length,
+        realCases: casesData.length,
+        realActive: casesData.filter(c => c.isActive).length,
+        dummyActive: !hasRealActiveCase ? 1 : 0,
+        dummyClosed: dummyClosedCases.length,
+        activeCasesPreview: allCases.filter(c => c.isActive).slice(0, 3).map(c => ({ 
+          id: c.id, 
+          isDummy: c.isDummy, 
+          desc: c.description?.substring(0, 50) 
+        }))
+      });
+      
+      setCases(allCases);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -208,15 +329,32 @@ const VotingInterface = ({ contract, account, isConnected, userStatus: propUserS
     }
 
     try {
-      // Get the ACTUAL MetaMask account
-      const provider = contract.provider;
-      if (!provider) {
+      // Get the ACTUAL MetaMask account - try multiple methods for ethers v6 compatibility
+      let provider, signer, actualAddress;
+      
+      // Method 1: Try contract.runner (ethers v6)
+      if (contract.runner && typeof contract.runner.getAddress === 'function') {
+        signer = contract.runner;
+        actualAddress = await signer.getAddress();
+        provider = signer.provider;
+      }
+      // Method 2: Try contract.provider.getSigner()
+      else if (contract.provider) {
+        provider = contract.provider;
+        signer = await provider.getSigner();
+        actualAddress = await signer.getAddress();
+      }
+      // Method 3: Use window.ethereum directly
+      else if (window.ethereum) {
+        const { ethers } = await import('ethers');
+        provider = new ethers.BrowserProvider(window.ethereum);
+        signer = await provider.getSigner();
+        actualAddress = await signer.getAddress();
+      }
+      else {
         alert('⚠️ No provider available. Please connect MetaMask.');
         return;
       }
-      
-      const signer = await provider.getSigner();
-      const actualAddress = await signer.getAddress();
       
       // Double-check the ACTUAL account is verified before voting
       const isVerified = await contract.isVoterVerified(actualAddress);
@@ -384,42 +522,74 @@ const VotingInterface = ({ contract, account, isConnected, userStatus: propUserS
         </div>
       )}
 
-      {/* Active Cases */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">
-          Active Ethics Cases
-        </h2>
+      {/* Separate Active and Closed Cases */}
+      {(() => {
+        // Active cases: real active cases first, then dummy active case only if no real ones
+        const realActiveCases = cases.filter(c => c.isActive && !c.isDummy);
+        const dummyActiveCase = cases.find(c => c.isActive && c.isDummy);
+        const activeCases = realActiveCases.length > 0 
+          ? realActiveCases  // Show only real active cases if they exist
+          : (dummyActiveCase ? [dummyActiveCase] : []); // Show dummy only if no real ones
         
-        {cases.length === 0 ? (
-          <div className="card text-center py-8">
-            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-gray-400 text-xl">📋</span>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No Active Cases
-            </h3>
-            <p className="text-gray-600">
-              There are currently no ethics cases open for voting.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-6">
-            {cases.map((caseItem) => (
-              <div key={caseItem.id} className="card hover:shadow-lg transition-shadow">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      Case #{caseItem.id + 1}: {caseItem.description}
-                    </h3>
-                    <div className="flex items-center space-x-4 text-sm text-gray-600">
-                      <span>Created: {caseItem.createdAt && caseItem.createdAt > 0 
-                        ? new Date(caseItem.createdAt * 1000).toLocaleDateString() 
-                        : 'N/A'}</span>
-                      <span>Deadline: {caseItem.deadline && caseItem.deadline > 0 
-                        ? new Date(caseItem.deadline * 1000).toLocaleDateString() 
-                        : 'N/A'}</span>
-                    </div>
+        // Closed cases: cases that are not active (including dummy closed cases)
+        const closedCases = cases.filter(c => !c.isActive);
+        
+        console.log('📊 Cases breakdown:', {
+          total: cases.length,
+          realActive: realActiveCases.length,
+          dummyActive: dummyActiveCase ? 1 : 0,
+          active: activeCases.length,
+          closed: closedCases.length,
+          activeCases: activeCases.map(c => ({ id: c.id, description: c.description?.substring(0, 40), isDummy: c.isDummy })),
+          closedCases: closedCases.map(c => ({ id: c.id, description: c.description?.substring(0, 40), isDummy: c.isDummy }))
+        });
+        
+        return (
+          <>
+            {/* Active Cases */}
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                <span className="mr-2">🟢</span>
+                Active Cases - Cast Your Vote
+              </h2>
+              
+              {activeCases.length === 0 ? (
+                <div className="card text-center py-8 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-blue-600 text-2xl">📋</span>
                   </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    No Active Cases
+                  </h3>
+                  <p className="text-gray-600">
+                    There are currently no ethics cases open for voting.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-6">
+                  {activeCases.map((caseItem) => (
+                    <div key={caseItem.id} className="card hover:shadow-lg transition-shadow border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              Case #{caseItem.id + 1}: {caseItem.description}
+                            </h3>
+                            {!caseItem.hasVoted && caseItem.isActive && (
+                              <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium animate-pulse">
+                                ⚡ Not Cast Yet
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-4 text-sm text-gray-600">
+                            <span>Created: {caseItem.createdAt && caseItem.createdAt > 0 
+                              ? new Date(caseItem.createdAt * 1000).toLocaleDateString() 
+                              : 'N/A'}</span>
+                            <span>Deadline: {caseItem.deadline && caseItem.deadline > 0 
+                              ? new Date(caseItem.deadline * 1000).toLocaleDateString() 
+                              : 'N/A'}</span>
+                          </div>
+                        </div>
                   <div className="text-right">
                     <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       caseItem.isActive 
@@ -455,7 +625,17 @@ const VotingInterface = ({ contract, account, isConnected, userStatus: propUserS
                 {/* Voting Actions */}
                 {caseItem.isActive && userStatus.isVerified && (
                   <div className="border-t pt-4">
-                    {caseItem.hasVoted ? (
+                    {caseItem.isDummy ? (
+                      <div className="text-center">
+                        <div className="inline-flex items-center px-3 py-2 rounded-lg bg-blue-100 text-blue-800 mb-2">
+                          <span className="mr-2">ℹ️</span>
+                          This is a demo case. Create a real case from Board Interface to vote.
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Switch to Board Member account to create real cases for voting
+                        </p>
+                      </div>
+                    ) : caseItem.hasVoted ? (
                       <div className="text-center">
                         <div className="inline-flex items-center px-3 py-2 rounded-lg bg-success-100 text-success-800">
                           <span className="mr-2">✅</span>
@@ -466,25 +646,25 @@ const VotingInterface = ({ contract, account, isConnected, userStatus: propUserS
                       <div className="flex justify-center space-x-4">
                         <button
                           onClick={() => handleVote(caseItem.id, true)}
-                          disabled={!userStatus.isVerified || votingStatus[caseItem.id] === 'voting' || caseItem.hasVoted || !caseItem.isActive}
+                          disabled={!userStatus.isVerified || votingStatus[caseItem.id] === 'voting' || caseItem.hasVoted || !caseItem.isActive || caseItem.isDummy}
                           className={`btn-success transition-all ${
-                            !userStatus.isVerified || votingStatus[caseItem.id] === 'voting' || caseItem.hasVoted || !caseItem.isActive
+                            !userStatus.isVerified || votingStatus[caseItem.id] === 'voting' || caseItem.hasVoted || !caseItem.isActive || caseItem.isDummy
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:scale-105'
                           }`}
-                          title={!userStatus.isVerified ? 'You must be a verified voter to vote' : caseItem.hasVoted ? 'You have already voted' : ''}
+                          title={caseItem.isDummy ? 'This is a demo case' : !userStatus.isVerified ? 'You must be a verified voter to vote' : caseItem.hasVoted ? 'You have already voted' : ''}
                         >
                           {votingStatus[caseItem.id] === 'voting' ? 'Voting...' : 'Vote YES'}
                         </button>
                         <button
                           onClick={() => handleVote(caseItem.id, false)}
-                          disabled={!userStatus.isVerified || votingStatus[caseItem.id] === 'voting' || caseItem.hasVoted || !caseItem.isActive}
+                          disabled={!userStatus.isVerified || votingStatus[caseItem.id] === 'voting' || caseItem.hasVoted || !caseItem.isActive || caseItem.isDummy}
                           className={`btn-danger transition-all ${
-                            !userStatus.isVerified || votingStatus[caseItem.id] === 'voting' || caseItem.hasVoted || !caseItem.isActive
+                            !userStatus.isVerified || votingStatus[caseItem.id] === 'voting' || caseItem.hasVoted || !caseItem.isActive || caseItem.isDummy
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:scale-105'
                           }`}
-                          title={!userStatus.isVerified ? 'You must be a verified voter to vote' : caseItem.hasVoted ? 'You have already voted' : ''}
+                          title={caseItem.isDummy ? 'This is a demo case' : !userStatus.isVerified ? 'You must be a verified voter to vote' : caseItem.hasVoted ? 'You have already voted' : ''}
                         >
                           {votingStatus[caseItem.id] === 'voting' ? 'Voting...' : 'Vote NO'}
                         </button>
@@ -505,10 +685,145 @@ const VotingInterface = ({ contract, account, isConnected, userStatus: propUserS
                   </div>
                 )}
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Closed/Inactive Cases */}
+            {closedCases.length > 0 && (
+              <div className="mt-12">
+                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                  <span className="mr-2">📊</span>
+                  Closed Cases - View Results
+                </h2>
+                
+                <div className="grid gap-6">
+                  {closedCases.map((caseItem) => {
+                    const yesPercent = caseItem.totalVotes > 0 
+                      ? Math.round((caseItem.yesVotes / caseItem.totalVotes) * 100) 
+                      : 0;
+                    const noPercent = caseItem.totalVotes > 0 
+                      ? Math.round((caseItem.noVotes / caseItem.totalVotes) * 100) 
+                      : 0;
+                    const isApproved = caseItem.yesVotes > caseItem.noVotes;
+                    
+                    return (
+                      <div key={caseItem.id} className="card hover:shadow-lg transition-shadow bg-gradient-to-br from-gray-50 to-gray-100">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {caseItem.isDummy ? `Case #${Math.abs(caseItem.id)}` : `Case #${caseItem.id + 1}`}: {caseItem.description}
+                              </h3>
+                              {caseItem.isDummy && (
+                                <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">Demo</span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-4 text-sm text-gray-600">
+                              <span>Created: {caseItem.createdAt && caseItem.createdAt > 0 
+                                ? new Date(caseItem.createdAt * 1000).toLocaleDateString() 
+                                : 'N/A'}</span>
+                              <span>Closed: {caseItem.deadline && caseItem.deadline > 0 
+                                ? new Date(caseItem.deadline * 1000).toLocaleDateString() 
+                                : 'N/A'}</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${
+                              isApproved
+                                ? 'bg-success-100 text-success-800'
+                                : 'bg-danger-100 text-danger-800'
+                            }`}>
+                              {isApproved ? '✅ Approved' : '❌ Rejected'}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">Voting Closed</p>
+                          </div>
+                        </div>
+
+                        {/* Results with Pie Chart */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                          {/* Pie Chart */}
+                          <div className="flex items-center justify-center">
+                            <PieChart 
+                              yesVotes={caseItem.yesVotes} 
+                              noVotes={caseItem.noVotes} 
+                              size={140}
+                            />
+                          </div>
+                          
+                          {/* Vote Stats */}
+                          <div className="space-y-3">
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-sm font-medium text-gray-700">Yes Votes</span>
+                                <span className="text-lg font-bold text-success-600">
+                                  {caseItem.yesVotes} ({yesPercent}%)
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                <div 
+                                  className="bg-success-500 h-2.5 rounded-full transition-all duration-500"
+                                  style={{ width: `${yesPercent}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-sm font-medium text-gray-700">No Votes</span>
+                                <span className="text-lg font-bold text-danger-600">
+                                  {caseItem.noVotes} ({noPercent}%)
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                <div 
+                                  className="bg-danger-500 h-2.5 rounded-full transition-all duration-500"
+                                  style={{ width: `${noPercent}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                            <div className="pt-2 border-t border-gray-200">
+                              <div className="text-center">
+                                <span className="text-sm text-gray-600">Total: </span>
+                                <span className="text-lg font-bold text-gray-900">{caseItem.totalVotes} votes</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Outcome */}
+                          <div className="flex flex-col justify-center items-center">
+                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-3 ${
+                              isApproved 
+                                ? 'bg-success-100' 
+                                : 'bg-danger-100'
+                            }`}>
+                              <span className="text-4xl">
+                                {isApproved ? '✅' : '❌'}
+                              </span>
+                            </div>
+                            <p className={`text-sm font-semibold ${
+                              isApproved 
+                                ? 'text-success-700' 
+                                : 'text-danger-700'
+                            }`}>
+                              {isApproved ? 'Approved' : 'Rejected'}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {isApproved 
+                                ? `${yesPercent}% in favor` 
+                                : `${noPercent}% against`}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 };
