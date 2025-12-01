@@ -1,0 +1,188 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom animations for receipt system */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out;
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Custom button styles */
+.btn-primary {
+  @apply px-4 py-2 bg-medical-600 hover:bg-medical-700 text-white rounded-lg font-medium transition-all duration-200 hover:scale-105 active:scale-95;
+}
+
+.btn-success {
+  @apply px-4 py-2 bg-success-600 hover:bg-success-700 text-white rounded-lg font-medium transition-all duration-200 hover:scale-105 active:scale-95;
+}
+
+.btn-danger {
+  @apply px-4 py-2 bg-danger-600 hover:bg-danger-700 text-white rounded-lg font-medium transition-all duration-200 hover:scale-105 active:scale-95;
+}
+
+/* Card styles */
+.card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200;
+}
+
+.card:hover {
+  @apply shadow-md;
+}
+
+/* Medical theme colors */
+:root {
+  --medical-50: #f0f9ff;
+  --medical-100: #e0f2fe;
+  --medical-200: #bae6fd;
+  --medical-300: #7dd3fc;
+  --medical-400: #38bdf8;
+  --medical-500: #0ea5e9;
+  --medical-600: #0284c7;
+  --medical-700: #0369a1;
+  --medical-800: #075985;
+  --medical-900: #0c4a6e;
+  
+  --success-50: #f0fdf4;
+  --success-100: #dcfce7;
+  --success-200: #bbf7d0;
+  --success-300: #86efac;
+  --success-400: #4ade80;
+  --success-500: #22c55e;
+  --success-600: #16a34a;
+  --success-700: #15803d;
+  --success-800: #166534;
+  --success-900: #14532d;
+  
+  --danger-50: #fef2f2;
+  --danger-100: #fee2e2;
+  --danger-200: #fecaca;
+  --danger-300: #fca5a5;
+  --danger-400: #f87171;
+  --danger-500: #ef4444;
+  --danger-600: #dc2626;
+  --danger-700: #b91c1c;
+  --danger-800: #991b1b;
+  --danger-900: #7f1d1d;
+}
+
+.bg-medical-50 { background-color: var(--medical-50); }
+.bg-medical-100 { background-color: var(--medical-100); }
+.bg-medical-200 { background-color: var(--medical-200); }
+.bg-medical-300 { background-color: var(--medical-300); }
+.bg-medical-400 { background-color: var(--medical-400); }
+.bg-medical-500 { background-color: var(--medical-500); }
+.bg-medical-600 { background-color: var(--medical-600); }
+.bg-medical-700 { background-color: var(--medical-700); }
+.bg-medical-800 { background-color: var(--medical-800); }
+.bg-medical-900 { background-color: var(--medical-900); }
+
+.text-medical-600 { color: var(--medical-600); }
+.text-medical-700 { color: var(--medical-700); }
+.text-medical-800 { color: var(--medical-800); }
+
+.bg-success-50 { background-color: var(--success-50); }
+.bg-success-100 { background-color: var(--success-100); }
+.bg-success-200 { background-color: var(--success-200); }
+.bg-success-500 { background-color: var(--success-500); }
+.bg-success-600 { background-color: var(--success-600); }
+.bg-success-700 { background-color: var(--success-700); }
+.bg-success-800 { background-color: var(--success-800); }
+
+.text-success-600 { color: var(--success-600); }
+.text-success-700 { color: var(--success-700); }
+.text-success-800 { color: var(--success-800); }
+
+.bg-danger-50 { background-color: var(--danger-50); }
+.bg-danger-100 { background-color: var(--danger-100); }
+.bg-danger-200 { background-color: var(--danger-200); }
+.bg-danger-500 { background-color: var(--danger-500); }
+.bg-danger-600 { background-color: var(--danger-600); }
+.bg-danger-700 { background-color: var(--danger-700); }
+.bg-danger-800 { background-color: var(--danger-800); }
+
+.text-danger-600 { color: var(--danger-600); }
+.text-danger-700 { color: var(--danger-700); }
+.text-danger-800 { color: var(--danger-800); }
+
+/* Smooth transitions */
+* {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Receipt display enhancements */
+.receipt-hash {
+  @apply font-mono text-sm break-all;
+  word-break: break-all;
+}
+
+/* Loading spinner */
+.spinner {
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid var(--medical-600);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+

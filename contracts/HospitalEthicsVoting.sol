@@ -29,6 +29,11 @@ contract HospitalEthicsVoting is ReentrancyGuard {
     // ZK Proof Simulation (nullifier system)
     mapping(bytes32 => bool) public usedNullifiers;
     
+    // Blind Receipt System
+    mapping(bytes32 => bool) public receiptExists; // receiptHash => exists
+    mapping(uint256 => bytes32[]) public caseReceipts; // caseId => receipt hashes
+    mapping(address => mapping(uint256 => bytes32)) public voterReceipts; // voter => caseId => receiptHash
+    
     // Voting Records (for transparency)
     struct VoteRecord {
         address voter;
@@ -47,6 +52,7 @@ contract HospitalEthicsVoting is ReentrancyGuard {
     event EthicsCaseCreated(uint256 indexed caseId, string description);
     event VoteSubmitted(address indexed voter, uint256 indexed caseId, bool vote);
     event CaseResolved(uint256 indexed caseId, bool approved);
+    event ReceiptGenerated(address indexed voter, uint256 indexed caseId, bytes32 receiptHash);
     
     // Modifiers
     modifier onlyBoardMember() {
@@ -133,6 +139,21 @@ contract HospitalEthicsVoting is ReentrancyGuard {
         usedNullifiers[nullifierHash] = true;
         hasVoted[msg.sender][caseId] = true;
         
+        // Generate blind receipt: keccak256(vote + caseId + voter + timestamp + salt)
+        // Using nullifierHash as part of the salt for uniqueness
+        bytes32 receiptHash = keccak256(abi.encodePacked(
+            vote,
+            caseId,
+            msg.sender,
+            block.timestamp,
+            nullifierHash
+        ));
+        
+        // Store receipt
+        receiptExists[receiptHash] = true;
+        caseReceipts[caseId].push(receiptHash);
+        voterReceipts[msg.sender][caseId] = receiptHash;
+        
         // Record vote
         voteRecords.push(VoteRecord({
             voter: msg.sender,
@@ -150,6 +171,7 @@ contract HospitalEthicsVoting is ReentrancyGuard {
         }
         
         emit VoteSubmitted(msg.sender, caseId, vote);
+        emit ReceiptGenerated(msg.sender, caseId, receiptHash);
     }
     
     // Resolution Functions
@@ -198,5 +220,35 @@ contract HospitalEthicsVoting is ReentrancyGuard {
     
     function hasVoterVoted(address voter, uint256 caseId) external view returns (bool) {
         return hasVoted[voter][caseId];
+    }
+    
+    // Blind Receipt Functions
+    function getVoterReceipt(address voter, uint256 caseId) external view returns (bytes32) {
+        return voterReceipts[voter][caseId];
+    }
+    
+
+    function verifyReceipt(bytes32 receiptHash, uint256 caseId) external view returns (bool) {
+        if (!receiptExists[receiptHash]) {
+            return false;
+        }
+        
+        // Check if receipt is in the case's receipt list
+        bytes32[] memory receipts = caseReceipts[caseId];
+        for (uint256 i = 0; i < receipts.length; i++) {
+            if (receipts[i] == receiptHash) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+
+    function getCaseReceipts(uint256 caseId) external view caseExists(caseId) returns (bytes32[] memory) {
+        return caseReceipts[caseId];
+    }
+
+    function isReceiptValid(bytes32 receiptHash) external view returns (bool) {
+        return receiptExists[receiptHash];
     }
 }
