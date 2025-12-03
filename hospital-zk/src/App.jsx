@@ -4,6 +4,7 @@ import VotingInterface from './components/VotingInterface';
 import ResultsPage from './components/ResultsPage';
 import BoardInterface from './components/BoardInterface';
 import ReceiptHistory from './components/ReceiptHistory';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
 import DemoMode from './components/DemoMode';
 import TransactionRecorder, { emitTransaction } from './components/TransactionRecorder';
 import DemoWorkflowGuide from './components/DemoWorkflowGuide';
@@ -429,6 +430,18 @@ function App() {
               Results
             </button>
 
+            {/* Analytics - Always visible to everyone */}
+            <button
+              onClick={() => setCurrentView('analytics')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                currentView === 'analytics'
+                  ? 'border-medical-500 text-medical-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Analytics
+            </button>
+
             {/* My Receipts - Visible to Board Members and Verified Voters */}
             {isConnected && (userStatus.isBoardMember || userStatus.isVerified) && (
               <button
@@ -492,6 +505,14 @@ function App() {
               {/* Results - Always accessible */}
               {currentView === 'results' && (
                 <ResultsPage 
+                  contract={contract} 
+                  account={account}
+                />
+              )}
+              
+              {/* Analytics - Always accessible */}
+              {currentView === 'analytics' && (
+                <AnalyticsDashboard 
                   contract={contract} 
                   account={account}
                 />
