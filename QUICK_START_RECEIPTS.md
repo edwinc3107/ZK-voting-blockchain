@@ -79,3 +79,5 @@ npm test test/blindReceiptTest.js
 - Check console for errors
 - Verify account is connected
 
+
+

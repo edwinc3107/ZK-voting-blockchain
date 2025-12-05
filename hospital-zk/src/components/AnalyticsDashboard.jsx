@@ -18,6 +18,14 @@ import {
   formatNumber 
 } from '../utils/analyticsUtils';
 import { getCaseReceiptsFromChain } from '../utils/receiptUtils';
+import { 
+  calculateGasMetrics, 
+  formatGasNumber, 
+  setBaselineMetrics, 
+  getBaselineMetrics, 
+  compareWithBaseline,
+  clearBaselineMetrics 
+} from '../utils/gasUtils';
 
 // Register Chart.js components
 ChartJS.register(
@@ -38,6 +46,9 @@ const AnalyticsDashboard = ({ contract, account }) => {
   const [votesOverTimeData, setVotesOverTimeData] = useState([]);
   const [caseParticipation, setCaseParticipation] = useState([]);
   const [totalReceipts, setTotalReceipts] = useState(0);
+  const [gasMetrics, setGasMetrics] = useState(null);
+  const [baselineComparison, setBaselineComparison] = useState(null);
+  const [baselineInfo, setBaselineInfo] = useState(null);
 
   useEffect(() => {
     if (contract) {
@@ -101,10 +112,42 @@ const AnalyticsDashboard = ({ contract, account }) => {
       const participation = getCaseParticipation(casesData);
       setCaseParticipation(participation);
 
+      // Calculate gas metrics
+      const gas = calculateGasMetrics();
+      setGasMetrics(gas);
+
+      // Check for baseline and calculate comparison
+      const baseline = getBaselineMetrics();
+      setBaselineInfo(baseline);
+      
+      if (baseline) {
+        const comparison = compareWithBaseline();
+        setBaselineComparison(comparison);
+      } else {
+        setBaselineComparison(null);
+      }
+
     } catch (error) {
       console.error('Error loading analytics data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSetBaseline = () => {
+    const label = prompt('Enter a label for this baseline (e.g., "Before Optimization", "v1.0"):', 'Before Optimization');
+    if (label) {
+      setBaselineMetrics(label);
+      // Reload to show comparison
+      loadData();
+    }
+  };
+
+  const handleClearBaseline = () => {
+    if (confirm('Are you sure you want to clear the baseline metrics?')) {
+      clearBaselineMetrics();
+      setBaselineInfo(null);
+      setBaselineComparison(null);
     }
   };
 
@@ -360,9 +403,304 @@ const AnalyticsDashboard = ({ contract, account }) => {
           <p className="text-gray-500 text-center py-4">No case data available</p>
         )}
       </div>
+
+      {/* Gas Metrics Section */}
+      {gasMetrics && gasMetrics.totalTransactions > 0 && (
+        <>
+          <div className="card bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  ⛽ Gas Metrics
+                </h2>
+                <p className="text-gray-600">
+                  Transaction gas usage and cost analytics
+                </p>
+              </div>
+              <div className="flex space-x-2">
+                {!baselineInfo ? (
+                  <button
+                    onClick={handleSetBaseline}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
+                  >
+                    📌 Set Baseline
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleSetBaseline}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
+                    >
+                      🔄 Update Baseline
+                    </button>
+                    <button
+                      onClick={handleClearBaseline}
+                      className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm font-medium"
+                    >
+                      🗑️ Clear Baseline
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            {baselineInfo && (
+              <div className="mt-3 p-3 bg-indigo-100 rounded-lg border border-indigo-200">
+                <p className="text-sm text-indigo-800">
+                  <strong>Baseline:</strong> {baselineInfo.label} (set on {new Date(baselineInfo.timestamp).toLocaleString()})
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Gas Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Total Transactions */}
+            <div className="card bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-indigo-700 mb-1">Total Transactions</p>
+                  <p className="text-3xl font-bold text-indigo-900">{formatNumber(gasMetrics.totalTransactions)}</p>
+                  <p className="text-xs text-indigo-600 mt-1">
+                    All recorded actions
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-indigo-200 rounded-lg flex items-center justify-center">
+                  <span className="text-2xl">📊</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Total Gas Used */}
+            <div className="card bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-700 mb-1">Total Gas Used</p>
+                  <p className="text-3xl font-bold text-blue-900">{formatGasNumber(gasMetrics.totalGasUsed)}</p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    {formatGasNumber(gasMetrics.avgGasPerTransaction)} avg per tx
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-blue-200 rounded-lg flex items-center justify-center">
+                  <span className="text-2xl">⛽</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Total Cost ETH */}
+            <div className="card bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-purple-700 mb-1">Total Cost (ETH)</p>
+                  <p className="text-3xl font-bold text-purple-900">{parseFloat(gasMetrics.totalGasCostEth).toFixed(6)}</p>
+                  <p className="text-xs text-purple-600 mt-1">
+                    {gasMetrics.avgGasCostEth} avg per tx
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-purple-200 rounded-lg flex items-center justify-center">
+                  <span className="text-2xl">Ξ</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Total Cost USD */}
+            <div className="card bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-green-700 mb-1">Total Cost (USD)</p>
+                  <p className="text-3xl font-bold text-green-900">${formatNumber(parseFloat(gasMetrics.totalGasCostUsd).toFixed(2))}</p>
+                  <p className="text-xs text-green-600 mt-1">
+                    ${gasMetrics.avgGasCostUsd} avg per tx
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-green-200 rounded-lg flex items-center justify-center">
+                  <span className="text-2xl">💵</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Before/After Comparison */}
+          {baselineComparison && baselineComparison.hasBaseline && (
+            <div className="card bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                📊 Before/After Optimization Comparison
+              </h3>
+              
+              {/* Overall Improvements */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-white p-4 rounded-lg border border-green-200">
+                  <p className="text-sm text-gray-600 mb-1">Total Gas Improvement</p>
+                  <p className={`text-2xl font-bold ${
+                    baselineComparison.comparison.totalGasImprovement >= 0 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }`}>
+                    {baselineComparison.comparison.totalGasImprovement >= 0 ? '↓' : '↑'} {Math.abs(baselineComparison.comparison.totalGasImprovement).toFixed(1)}%
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Saved: {formatGasNumber(baselineComparison.comparison.totalGasSaved)} gas
+                  </p>
+                </div>
+                
+                <div className="bg-white p-4 rounded-lg border border-green-200">
+                  <p className="text-sm text-gray-600 mb-1">Total Cost Improvement</p>
+                  <p className={`text-2xl font-bold ${
+                    baselineComparison.comparison.totalCostImprovement >= 0 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }`}>
+                    {baselineComparison.comparison.totalCostImprovement >= 0 ? '↓' : '↑'} {Math.abs(baselineComparison.comparison.totalCostImprovement).toFixed(1)}%
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Saved: ${baselineComparison.comparison.totalCostSaved}
+                  </p>
+                </div>
+                
+                <div className="bg-white p-4 rounded-lg border border-green-200">
+                  <p className="text-sm text-gray-600 mb-1">Avg Gas per Transaction</p>
+                  <p className={`text-2xl font-bold ${
+                    baselineComparison.comparison.avgGasImprovement >= 0 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }`}>
+                    {baselineComparison.comparison.avgGasImprovement >= 0 ? '↓' : '↑'} {Math.abs(baselineComparison.comparison.avgGasImprovement).toFixed(1)}%
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Per transaction improvement
+                  </p>
+                </div>
+              </div>
+
+              {/* Action-by-Action Comparison */}
+              {Object.keys(baselineComparison.byActionType).length > 0 && (
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">
+                    Action-by-Action Comparison
+                  </h4>
+                  <div className="space-y-3">
+                    {Object.entries(baselineComparison.byActionType).map(([actionType, comparison]) => (
+                      <div 
+                        key={actionType}
+                        className="bg-white p-4 rounded-lg border border-gray-200"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h5 className="text-sm font-semibold text-gray-900">
+                            {actionType.replace(/_/g, ' ')}
+                          </h5>
+                          <div className="flex items-center space-x-4">
+                            {comparison.gasImprovement !== 0 && (
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                comparison.gasImprovement >= 0 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {comparison.gasImprovement >= 0 ? '↓' : '↑'} {Math.abs(comparison.gasImprovement).toFixed(1)}% gas
+                              </span>
+                            )}
+                            {comparison.costImprovement !== 0 && (
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                comparison.costImprovement >= 0 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {comparison.costImprovement >= 0 ? '↓' : '↑'} {Math.abs(comparison.costImprovement).toFixed(1)}% cost
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Before (Baseline)</p>
+                            {comparison.baseline ? (
+                              <div className="space-y-1">
+                                <p className="font-medium">Avg Gas: {formatGasNumber(comparison.baseline.avgGasUsed)}</p>
+                                <p className="font-medium">Cost: ${comparison.baseline.avgGasCostUsd}</p>
+                                <p className="text-xs text-gray-500">{comparison.baseline.count} transactions</p>
+                              </div>
+                            ) : (
+                              <p className="text-gray-400">N/A</p>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">After (Current)</p>
+                            {comparison.current ? (
+                              <div className="space-y-1">
+                                <p className="font-medium">Avg Gas: {formatGasNumber(comparison.current.avgGasUsed)}</p>
+                                <p className="font-medium">Cost: ${comparison.current.avgGasCostUsd}</p>
+                                <p className="text-xs text-gray-500">{comparison.current.count} transactions</p>
+                              </div>
+                            ) : (
+                              <p className="text-gray-400">N/A</p>
+                            )}
+                          </div>
+                        </div>
+                        {comparison.gasSaved !== '0' && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="text-xs text-gray-600">
+                              <strong>Savings:</strong> {formatGasNumber(comparison.gasSaved)} gas ({comparison.gasSaved !== '0' && comparison.costSaved !== '0' ? `$${comparison.costSaved}` : 'N/A'} per transaction)
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Gas Metrics by Action Type */}
+          {Object.keys(gasMetrics.byActionType).length > 0 && (
+            <div className="card">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Gas Usage by Action Type
+              </h3>
+              <div className="space-y-3">
+                {Object.entries(gasMetrics.byActionType).map(([actionType, stats]) => (
+                  <div 
+                    key={actionType}
+                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <span className="text-sm font-semibold text-gray-900">
+                          {actionType.replace(/_/g, ' ')}
+                        </span>
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
+                          {stats.count} {stats.count === 1 ? 'tx' : 'txs'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 text-xs text-gray-600">
+                        <div>
+                          <span className="font-medium">Avg Gas:</span> {formatGasNumber(stats.avgGasUsed)}
+                        </div>
+                        <div>
+                          <span className="font-medium">Min:</span> {formatGasNumber(stats.minGasUsed)} | <span className="font-medium">Max:</span> {formatGasNumber(stats.maxGasUsed)}
+                        </div>
+                        <div>
+                          <span className="font-medium">Cost:</span> {parseFloat(stats.avgGasCostEth).toFixed(6)} ETH (${stats.avgGasCostUsd})
+                        </div>
+                      </div>
+                    </div>
+                    <div className="ml-4 text-right">
+                      <p className="text-lg font-bold text-gray-900">
+                        {formatGasNumber(stats.totalGasUsed)}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Total gas
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };
 
 export default AnalyticsDashboard;
+
 

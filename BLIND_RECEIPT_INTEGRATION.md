@@ -179,3 +179,5 @@ const isValid = await contract.verifyReceipt(receiptHash, caseId);
 - All receipts for a case can be viewed publicly for transparency
 - Users can verify their receipt is included in the final tally
 
+
+

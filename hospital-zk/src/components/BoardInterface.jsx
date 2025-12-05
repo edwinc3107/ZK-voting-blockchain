@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { emitTransaction } from './TransactionRecorder';
+import { recordGasMetrics } from '../utils/gasUtils';
 
 const BoardInterface = ({ contract, account, isConnected, userStatus }) => {
   const [cases, setCases] = useState([]);
@@ -232,7 +233,13 @@ const BoardInterface = ({ contract, account, isConnected, userStatus }) => {
       // Use contract directly if it already has a signer, otherwise connect it
       const contractToUse = contract.runner ? contract : contract.connect(signer);
       const tx = await contractToUse.createEthicsCase(newCase.description, durationInSeconds);
-      await tx.wait();
+      const receipt = await tx.wait();
+
+      // Record gas metrics
+      recordGasMetrics('BOARD_CREATE_CASE', receipt, actualAddress, {
+        caseDescription: newCase.description,
+        duration: newCase.duration
+      });
 
       emitTransaction('case_created', {
         description: newCase.description,
@@ -268,20 +275,42 @@ const BoardInterface = ({ contract, account, isConnected, userStatus }) => {
     if (!contract || !account) return;
 
     try {
-      // Get the signer and connect the contract
-      const provider = contract.provider;
-      if (!provider) {
+      // Get the signer and actual address
+      let signer;
+      let actualAddress;
+      
+      // Check if contract has a runner (signer) attached (ethers v6)
+      if (contract.runner && typeof contract.runner.getAddress === 'function') {
+        signer = contract.runner;
+        actualAddress = await signer.getAddress();
+      } else if (contract.provider) {
+        // Fallback: get signer from provider
+        signer = await contract.provider.getSigner();
+        actualAddress = await signer.getAddress();
+      } else if (window.ethereum) {
+        // Last resort: create new provider and signer
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        signer = await provider.getSigner();
+        actualAddress = await signer.getAddress();
+      } else {
         alert('⚠️ No provider available. Please connect MetaMask.');
         return;
       }
       
-      const signer = await provider.getSigner();
       const contractWithSigner = contract.connect(signer);
       const tx = await contractWithSigner.resolveCase(caseId);
-      await tx.wait();
+      const receipt = await tx.wait();
 
+      // Record gas metrics
       const caseData = await contract.getCase(caseId);
       const approved = Number(caseData.yesVotes) > Number(caseData.noVotes);
+      
+      recordGasMetrics('BOARD_RESOLVE_CASE', receipt, actualAddress, {
+        caseId,
+        approved,
+        yesVotes: Number(caseData.yesVotes),
+        noVotes: Number(caseData.noVotes)
+      });
 
       emitTransaction('case_resolved', {
         caseId,

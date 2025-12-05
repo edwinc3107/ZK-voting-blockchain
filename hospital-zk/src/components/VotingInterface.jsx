@@ -4,6 +4,7 @@ import { emitTransaction } from './TransactionRecorder';
 import ReceiptDisplay from './ReceiptDisplay';
 import { getVoterReceipt, saveReceipt } from '../utils/receiptUtils';
 import PieChart from './PieChart';
+import { recordGasMetrics } from '../utils/gasUtils';
 
 const VotingInterface = ({ contract, account, isConnected, userStatus: propUserStatus }) => {
   const [cases, setCases] = useState([]);
@@ -382,7 +383,14 @@ const VotingInterface = ({ contract, account, isConnected, userStatus: propUserS
       // Connect the contract with the signer to ensure transactions work
       const contractWithSigner = contract.connect(signer);
       const tx = await contractWithSigner.submitVote(caseId, vote, nullifierHash);
-      await tx.wait();
+      const receipt = await tx.wait();
+
+      // Record gas metrics
+      recordGasMetrics('VOTER_CAST_VOTE', receipt, actualAddress, {
+        caseId,
+        vote: vote ? 'YES' : 'NO',
+        nullifierHash
+      });
 
       emitTransaction('vote_submitted', {
         caseId,
