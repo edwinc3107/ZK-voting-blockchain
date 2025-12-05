@@ -5,6 +5,7 @@ import ResultsPage from './components/ResultsPage';
 import BoardInterface from './components/BoardInterface';
 import ReceiptHistory from './components/ReceiptHistory';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
+import UserStudySimulator from './components/UserStudySimulator';
 import DemoMode from './components/DemoMode';
 import TransactionRecorder, { emitTransaction } from './components/TransactionRecorder';
 import DemoWorkflowGuide from './components/DemoWorkflowGuide';
@@ -442,6 +443,18 @@ function App() {
               Analytics
             </button>
 
+            {/* User Study Simulator - Always visible to everyone */}
+            <button
+              onClick={() => setCurrentView('user-study')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                currentView === 'user-study'
+                  ? 'border-medical-500 text-medical-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              User Study
+            </button>
+
             {/* My Receipts - Visible to Board Members and Verified Voters */}
             {isConnected && (userStatus.isBoardMember || userStatus.isVerified) && (
               <button
@@ -515,6 +528,13 @@ function App() {
                 <AnalyticsDashboard 
                   contract={contract} 
                   account={account}
+                />
+              )}
+              
+              {/* User Study Simulator - Always accessible */}
+              {currentView === 'user-study' && (
+                <UserStudySimulator 
+                  contract={contract} 
                 />
               )}
               
