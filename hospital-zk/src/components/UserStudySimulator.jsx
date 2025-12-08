@@ -257,3 +257,5 @@ const UserStudySimulator = ({ contract }) => {
 
 export default UserStudySimulator;
 
+
+
